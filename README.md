@@ -1,6 +1,3 @@
-cd ~/crowdsec-custom
-
-cat > README.md <<'EOF'
 # CrowdSec Custom Security
 
 Набор собственных конфигураций CrowdSec для Linux-серверов.
