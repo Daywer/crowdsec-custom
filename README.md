@@ -1,6 +1,10 @@
 # CrowdSec Custom Security
 
+[🇷🇺 Русский](#-русская-версия) · [🇬🇧 English](#-english-version)
+
 Custom CrowdSec configurations for Linux servers.
+
+This repository contains local parsers and scenarios that complement the standard CrowdSec rules.
 
 ---
 
@@ -22,7 +26,41 @@ CrowdSec создаёт `decision`, а Firewall Bouncer применяет ег�
 
 > **Примечание:** собственные правила работают совместно со стандартной конфигурацией CrowdSec, а не заменяют её.
 
-## Структура репозитория
+## Установка
+
+На целевом сервере должен быть установлен CrowdSec.
+
+```bash
+git clone git@github.com:Daywer/crowdsec-custom.git
+cd crowdsec-custom
+sudo ./install.sh
+```
+
+Скрипт автоматически:
+
+1. устанавливает parser;
+2. устанавливает сценарии;
+3. проверяет конфигурацию CrowdSec;
+4. перезапускает CrowdSec только после успешной проверки.
+
+Перед перезапуском выполняется:
+
+```bash
+crowdsec -c /etc/crowdsec/config.yaml -t
+```
+
+Если проверка не проходит, CrowdSec не перезапускается.
+
+## Что устанавливается
+
+В репозитории находятся:
+
+- parser для `sshd-session`;
+- сценарий немедленной блокировки попыток входа под несуществующим пользователем;
+- сценарий немедленной блокировки попыток SSH-аутентификации под `root`;
+- установочный скрипт для автоматического развёртывания.
+
+## Структура
 
 ```text
 crowdsec-custom/
@@ -45,7 +83,7 @@ parsers/sshd-session-local.yaml
 
 Parser предназначен для OpenSSH, использующего процесс `sshd-session`.
 
-Он обрабатывает два типа событий.
+Обрабатываются два типа сообщений.
 
 ### Несуществующий пользователь
 
@@ -53,20 +91,20 @@ Parser предназначен для OpenSSH, использующего пр�
 Connection closed by invalid user <user> <IP> port <port> [preauth]
 ```
 
-Из события извлекаются:
+Из сообщения извлекаются:
 
 ```text
 source_ip
 target_user
 ```
 
-Создаётся событие CrowdSec:
+Создаётся событие:
 
 ```text
 log_type = ssh_failed-auth
 ```
 
-### Попытка аутентификации под root
+### Попытка входа под root
 
 ```text
 Connection closed by authenticating user root <IP> port <port> [preauth]
@@ -187,31 +225,6 @@ SSH
     └── crowdsecurity/ssh-slow-bf
 ```
 
-## Установка
-
-На целевом сервере должен быть установлен CrowdSec.
-
-```bash
-git clone git@github.com:Daywer/crowdsec-custom.git
-cd crowdsec-custom
-sudo ./install.sh
-```
-
-Скрипт автоматически:
-
-1. устанавливает parser;
-2. устанавливает сценарии;
-3. проверяет конфигурацию CrowdSec;
-4. перезапускает CrowdSec только после успешной проверки.
-
-Перед перезапуском выполняется:
-
-```bash
-crowdsec -c /etc/crowdsec/config.yaml -t
-```
-
-Если проверка не проходит, CrowdSec не перезапускается.
-
 ## Проверка
 
 ### Проверить установленные сценарии
@@ -226,7 +239,7 @@ sudo cscli scenarios list | grep -E 'ssh-invalid|ssh-root|ssh-bf'
 sudo cscli explain --log 'Sep 04 10:14:54 1cadman.egs54.ru sshd-session[2000214]: Connection closed by invalid user test 221.153.12.93 port 48956 [preauth]' --type syslog
 ```
 
-Ожидаемый результат:
+Ожидается:
 
 ```text
 parser success
@@ -238,7 +251,7 @@ parser success
 sudo cscli explain --log 'Sep 04 10:25:41 1cadman.egs54.ru sshd-session[2006083]: Connection closed by authenticating user root 75.64.135.45 port 49414 [preauth]' --type syslog
 ```
 
-Ожидаемый результат:
+Ожидается:
 
 ```text
 parser success
@@ -337,11 +350,45 @@ Current rules:
 - an SSH authentication attempt as `root` results in an immediate IP ban;
 - the standard CrowdSec scenarios `ssh-bf`, `ssh-bf_user-enum`, `ssh-slow-bf`, and `ssh-slow-bf_user-enum` continue to operate independently of the custom rules.
 
-CrowdSec creates the `decision`, while the Firewall Bouncer applies it at firewall level.
+CrowdSec creates the `decision`, while the Firewall Bouncer applies it at the firewall level.
 
-> **Note:** these custom rules work alongside the standard CrowdSec configuration and do not replace it.
+> **Note:** custom rules work alongside the standard CrowdSec configuration and do not replace it.
 
-## Repository Structure
+## Installation
+
+CrowdSec must already be installed on the target server.
+
+```bash
+git clone git@github.com:Daywer/crowdsec-custom.git
+cd crowdsec-custom
+sudo ./install.sh
+```
+
+The installer automatically:
+
+1. installs the parser;
+2. installs the scenarios;
+3. validates the CrowdSec configuration;
+4. restarts CrowdSec only after successful validation.
+
+Before restarting, the following validation is performed:
+
+```bash
+crowdsec -c /etc/crowdsec/config.yaml -t
+```
+
+If validation fails, CrowdSec is not restarted.
+
+## What Is Installed
+
+The repository contains:
+
+- a parser for `sshd-session`;
+- a scenario that immediately bans SSH attempts using a nonexistent user;
+- a scenario that immediately bans SSH authentication attempts as `root`;
+- an installation script for automated deployment.
+
+## Structure
 
 ```text
 crowdsec-custom/
@@ -364,7 +411,7 @@ parsers/sshd-session-local.yaml
 
 The parser is designed for OpenSSH using the `sshd-session` process.
 
-It handles two types of events.
+It handles two types of messages.
 
 ### Nonexistent User
 
@@ -379,7 +426,7 @@ source_ip
 target_user
 ```
 
-and creates the CrowdSec event:
+and creates the event:
 
 ```text
 log_type = ssh_failed-auth
@@ -505,31 +552,6 @@ SSH
 └── slow bruteforce
     └── crowdsecurity/ssh-slow-bf
 ```
-
-## Installation
-
-CrowdSec must already be installed on the target server.
-
-```bash
-git clone git@github.com:Daywer/crowdsec-custom.git
-cd crowdsec-custom
-sudo ./install.sh
-```
-
-The installer automatically:
-
-1. installs the parser;
-2. installs the scenarios;
-3. validates the CrowdSec configuration;
-4. restarts CrowdSec only after successful validation.
-
-Before restarting, the following validation is performed:
-
-```bash
-crowdsec -c /etc/crowdsec/config.yaml -t
-```
-
-If validation fails, CrowdSec is not restarted.
 
 ## Verification
 
