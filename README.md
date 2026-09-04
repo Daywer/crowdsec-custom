@@ -33,3 +33,32 @@ crowdsec-custom/
 └── scenarios/
     ├── ssh-invalid-user-local.yaml
     └── ssh-root-auth-local.yaml
+
+---
+
+# English Version
+## Purpose
+
+This repository is intended for centralized storage and deployment of custom CrowdSec rules.
+
+The repository contains local parsers and scenarios that complement the standard CrowdSec rules.
+
+The main goal of the current configuration is to strengthen SSH protection against automated attacks.
+
+Specifically:
+
+an SSH login attempt using a nonexistent user immediately results in an IP ban;
+an SSH authentication attempt as root immediately results in an IP ban;
+the standard CrowdSec scenarios ssh-bf and ssh-slow-bf continue to operate independently of the custom rules.
+
+Bans are created by CrowdSec, while the Firewall Bouncer applies them at the firewall level.
+
+Structure
+crowdsec-custom/
+├── README.md
+├── install.sh
+├── parsers/
+│   └── sshd-session-local.yaml
+└── scenarios/
+    ├── ssh-invalid-user-local.yaml
+    └── ssh-root-auth-local.yaml
