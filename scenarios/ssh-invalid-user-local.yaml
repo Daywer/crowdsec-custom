@@ -1,0 +1,10 @@
+type: trigger
+name: local/ssh-invalid-user
+description: "Immediately ban SSH connections using a nonexistent user"
+filter: "evt.Meta.log_type == 'ssh_failed-auth' && evt.Meta.target_user != ''"
+groupby: evt.Meta.source_ip
+blackhole: 1m
+labels:
+  service: ssh
+  type: invalid-user
+  remediation: true

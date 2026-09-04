@@ -1,0 +1,10 @@
+type: trigger
+name: local/ssh-root-auth
+description: "Immediately ban SSH authentication attempts as root"
+filter: "evt.Meta.log_type == 'ssh_root-auth' && evt.Meta.target_user == 'root'"
+groupby: evt.Meta.source_ip
+blackhole: 1m
+labels:
+  service: ssh
+  type: root-auth
+  remediation: true

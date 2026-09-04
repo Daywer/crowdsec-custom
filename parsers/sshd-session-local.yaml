@@ -1,0 +1,27 @@
+onsuccess: next_stage
+filter: "evt.Parsed.program == 'sshd-session'"
+name: local/sshd-session
+description: "Parse OpenSSH sshd-session logs"
+
+nodes:
+  - grok:
+      apply_on: message
+      pattern: 'Connection closed by invalid user %{USERNAME:sshd_invalid_user} %{IP:sshd_client_ip} port \d+ \[preauth\]'
+      statics:
+        - meta: log_type
+          value: ssh_failed-auth
+        - meta: source_ip
+          expression: "evt.Parsed.sshd_client_ip"
+        - meta: target_user
+          expression: "evt.Parsed.sshd_invalid_user"
+
+  - grok:
+      apply_on: message
+      pattern: 'Connection closed by authenticating user root %{IP:sshd_root_client_ip} port \d+ \[preauth\]'
+      statics:
+        - meta: log_type
+          value: ssh_root-auth
+        - meta: source_ip
+          expression: "evt.Parsed.sshd_root_client_ip"
+        - meta: target_user
+          value: root
