@@ -33,7 +33,7 @@ CrowdSec создаёт `decision`, а Firewall Bouncer применяет ег�
 Клонировать репозиторий и перейти в его каталог:
 
 ```bash
-git clone git@github.com:Daywer/crowdsec-custom.git
+git clone https://github.com/Daywer/crowdsec-custom.git
 cd crowdsec-custom
 ```
 
@@ -381,7 +381,7 @@ CrowdSec creates a `decision`, and the Firewall Bouncer applies it at the firewa
 Clone the repository and enter its directory:
 
 ```bash
-git clone git@github.com:Daywer/crowdsec-custom.git
+git clone https://github.com/Daywer/crowdsec-custom.git
 cd crowdsec-custom
 ```
 
