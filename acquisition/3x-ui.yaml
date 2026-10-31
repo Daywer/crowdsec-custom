@@ -1,0 +1,4 @@
+filenames:
+  - /var/log/x-ui/3xui.log
+labels:
+  type: 3x-ui

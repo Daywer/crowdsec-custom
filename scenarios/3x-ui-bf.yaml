@@ -1,0 +1,12 @@
+type: leaky
+name: local/3x-ui-bf
+description: "Detect brute-force attacks against 3x-ui"
+filter: "evt.Meta.log_type == '3x-ui_failed_login'"
+groupby: evt.Meta.source_ip
+capacity: 3
+leakspeed: 5m
+blackhole: 24h
+labels:
+  service: 3x-ui
+  type: bruteforce
+  remediation: true
