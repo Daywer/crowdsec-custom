@@ -2,9 +2,7 @@
 
 [🇷🇺 Русский](#-русская-версия) · [🇬🇧 English](#-english-version)
 
-Custom CrowdSec configurations for Linux servers.
-
-This repository contains local parsers and scenarios that complement the standard CrowdSec rules.
+Custom CrowdSec configurations for Linux servers. The repository contains local parsers, scenarios, and acquisition configurations that complement the standard CrowdSec rules.
 
 ---
 
@@ -12,99 +10,109 @@ This repository contains local parsers and scenarios that complement the standar
 
 ## Назначение
 
-Этот репозиторий предназначен для централизованного хранения, версионирования и развёртывания собственных правил CrowdSec.
+Репозиторий предназначен для централизованного хранения, версионирования и развёртывания собственных конфигураций CrowdSec.
 
-Основная задача текущей конфигурации — усилить защиту SSH от автоматических атак.
+Сейчас доступны два независимых набора правил:
 
-Текущие правила:
+- **SSH** — защита от попыток входа под несуществующим пользователем и попыток SSH-аутентификации под `root`;
+- **3x-ui** — обнаружение brute-force атак на веб-панель 3x-ui.
 
-- попытка SSH-входа под несуществующим пользователем — немедленный бан IP;
-- попытка SSH-аутентификации под `root` — немедленный бан IP;
-- стандартные сценарии CrowdSec `ssh-bf`, `ssh-bf_user-enum`, `ssh-slow-bf` и `ssh-slow-bf_user-enum` продолжают работать независимо от собственных правил.
+Наборы можно устанавливать по отдельности или вместе. Установка одного набора не удаляет и не изменяет файлы другого.
 
-CrowdSec создаёт `decision`, а Firewall Bouncer применяет его на уровне firewall.
+CrowdSec создаёт `decision`, а Firewall Bouncer применяет его на уровне firewall. Собственные правила работают совместно со стандартной конфигурацией CrowdSec и не заменяют её.
 
-> **Примечание:** собственные правила работают совместно со стандартной конфигурацией CrowdSec, а не заменяют её.
+## Требования
+
+- Linux-сервер;
+- установленный и настроенный CrowdSec;
+- для фактической блокировки IP — установленный и подключённый Firewall Bouncer;
+- для набора `3x-ui` — 3x-ui с журналом `/var/log/x-ui/3xui.log`.
 
 ## Установка
 
-На целевом сервере должен быть установлен CrowdSec.
+Клонировать репозиторий и перейти в его каталог:
 
 ```bash
 git clone git@github.com:Daywer/crowdsec-custom.git
 cd crowdsec-custom
-sudo ./install.sh
 ```
 
-Скрипт автоматически:
+Установочный скрипт принимает один обязательный аргумент:
 
-1. устанавливает parser;
-2. устанавливает сценарии;
-3. проверяет конфигурацию CrowdSec;
-4. перезапускает CrowdSec только после успешной проверки.
+```text
+sudo ./install.sh {ssh|3x-ui|all}
+```
 
-Перед перезапуском выполняется:
+Примеры:
 
 ```bash
-crowdsec -c /etc/crowdsec/config.yaml -t
+# Установить только SSH-правила
+sudo ./install.sh ssh
+
+# Установить только правила для 3x-ui
+sudo ./install.sh 3x-ui
+
+# Установить все доступные наборы
+sudo ./install.sh all
 ```
 
-Если проверка не проходит, CrowdSec не перезапускается.
+Скрипт устанавливает только выбранный набор:
 
-## Что устанавливается
+| Аргумент | Что устанавливается |
+|---|---|
+| `ssh` | SSH parser и два SSH-сценария |
+| `3x-ui` | parser, сценарий и acquisition-файл для 3x-ui |
+| `all` | оба набора |
 
-В репозитории находятся:
+После установки скрипт:
 
-- parser для `sshd-session`;
-- сценарий немедленной блокировки попыток входа под несуществующим пользователем;
-- сценарий немедленной блокировки попыток SSH-аутентификации под `root`;
-- установочный скрипт для автоматического развёртывания.
+1. проверяет конфигурацию CrowdSec командой `crowdsec -c /etc/crowdsec/config.yaml -t`;
+2. перезапускает CrowdSec только в случае успешной проверки.
 
-## Структура
+Если проверка конфигурации завершается ошибкой, скрипт останавливается и не перезапускает CrowdSec.
+
+> Повторный запуск установщика безопасен для уже установленных файлов: файлы выбранного набора перезаписываются актуальными версиями из репозитория. Файлы других наборов не удаляются.
+
+## Структура репозитория
 
 ```text
 crowdsec-custom/
 ├── README.md
 ├── install.sh
 ├── parsers/
-│   └── sshd-session-local.yaml
-└── scenarios/
-    ├── ssh-invalid-user-local.yaml
-    └── ssh-root-auth-local.yaml
+│   ├── sshd-session-local.yaml
+│   └── 3x-ui-logs.yaml
+├── scenarios/
+│   ├── ssh-invalid-user-local.yaml
+│   ├── ssh-root-auth-local.yaml
+│   └── 3x-ui-bf.yaml
+└── acquisition/
+    └── 3x-ui.yaml
 ```
 
-## Parser
+## Набор SSH
 
-Файл:
+### Parser
 
-```text
-parsers/sshd-session-local.yaml
-```
+Файл: `parsers/sshd-session-local.yaml`
 
 Parser предназначен для OpenSSH, использующего процесс `sshd-session`.
 
 Обрабатываются два типа сообщений.
 
-### Несуществующий пользователь
+**Несуществующий пользователь:**
 
 ```text
 Connection closed by invalid user <user> <IP> port <port> [preauth]
 ```
 
-Из сообщения извлекаются:
-
-```text
-source_ip
-target_user
-```
-
-Создаётся событие:
+Из сообщения извлекаются `source_ip` и `target_user`. Создаётся событие:
 
 ```text
 log_type = ssh_failed-auth
 ```
 
-### Попытка входа под root
+**Попытка аутентификации под root:**
 
 ```text
 Connection closed by authenticating user root <IP> port <port> [preauth]
@@ -116,90 +124,18 @@ Connection closed by authenticating user root <IP> port <port> [preauth]
 log_type = ssh_root-auth
 ```
 
-с параметрами:
+с параметрами `source_ip` и `target_user = root`.
 
-```text
-source_ip
-target_user = root
-```
+### Сценарии
 
-## Scenario: несуществующий пользователь
+| Файл | Имя сценария | Условие |
+|---|---|---|
+| `scenarios/ssh-invalid-user-local.yaml` | `local/ssh-invalid-user` | одна попытка входа под несуществующим пользователем |
+| `scenarios/ssh-root-auth-local.yaml` | `local/ssh-root-auth` | одна попытка SSH-аутентификации под `root` |
 
-Файл:
+Каждое из этих событий является основанием для немедленного создания CrowdSec alert и блокировки IP. Срок блокировки определяется общей политикой CrowdSec в `/etc/crowdsec/profiles.yaml`. В текущей конфигурации используется срок 24 часа.
 
-```text
-scenarios/ssh-invalid-user-local.yaml
-```
-
-Имя сценария:
-
-```text
-local/ssh-invalid-user
-```
-
-Логика:
-
-```text
-invalid user
-      ↓
-1 событие
-      ↓
-CrowdSec alert
-      ↓
-BAN
-```
-
-Одна попытка входа под несуществующим пользователем является основанием для немедленной блокировки IP.
-
-## Scenario: root
-
-Файл:
-
-```text
-scenarios/ssh-root-auth-local.yaml
-```
-
-Имя сценария:
-
-```text
-local/ssh-root-auth
-```
-
-Логика:
-
-```text
-попытка SSH-аутентификации под root
-      ↓
-1 событие
-      ↓
-CrowdSec alert
-      ↓
-BAN
-```
-
-Правило применяется только к `root`.
-
-## Срок блокировки
-
-Продолжительность бана задаётся общей политикой CrowdSec в:
-
-```text
-/etc/crowdsec/profiles.yaml
-```
-
-В текущей инфраструктуре используется срок:
-
-```text
-24 часа
-```
-
-Поэтому новые решения, создаваемые этими сценариями, получают бан на 24 часа.
-
-## Стандартные SSH-сценарии CrowdSec
-
-Собственные правила не заменяют штатные сценарии CrowdSec.
-
-Продолжают работать:
+Стандартные сценарии CrowdSec продолжают работать независимо:
 
 ```text
 crowdsecurity/ssh-bf
@@ -208,65 +144,130 @@ crowdsecurity/ssh-slow-bf
 crowdsecurity/ssh-slow-bf_user-enum
 ```
 
-Итоговая схема:
+## Набор 3x-ui
+
+### Источник журналов (acquisition)
+
+Файл в репозитории: `acquisition/3x-ui.yaml`
+
+Установочный скрипт размещает его в:
 
 ```text
-SSH
-├── invalid user
-│   └── 1 событие → BAN
-│
-├── root authentication attempt
-│   └── 1 событие → BAN
-│
-├── обычный bruteforce
-│   └── crowdsecurity/ssh-bf
-│
-└── медленный bruteforce
-    └── crowdsecurity/ssh-slow-bf
+/etc/crowdsec/acquis.d/3x-ui.yaml
 ```
+
+Конфигурация читает журнал:
+
+```text
+/var/log/x-ui/3xui.log
+```
+
+и передаёт записи CrowdSec с типом `3x-ui`.
+
+### Parser
+
+Файл: `parsers/3x-ui-logs.yaml`
+
+Parser обрабатывает записи о неудачной авторизации в веб-панели 3x-ui. Пример записи:
+
+```text
+2026/10/31 13:43:35 WARNING - failed login: username="admin", IP="203.0.113.10", reason="invalid credentials"
+```
+
+Извлекаются:
+
+- `username` — имя пользователя;
+- `source_ip` — IP-адрес источника;
+- `reason` — причина отказа.
+
+Для события устанавливаются метаданные:
+
+```text
+log_type = 3x-ui_failed_login
+service = 3x-ui
+source_ip = <IP>
+```
+
+Успешные авторизации не являются событиями для этого сценария.
+
+### Сценарий brute-force
+
+Файл: `scenarios/3x-ui-bf.yaml`
+
+Имя сценария:
+
+```text
+local/3x-ui-bf
+```
+
+Параметры обнаружения:
+
+| Параметр | Значение |
+|---|---|
+| Группировка | IP-адрес источника (`source_ip`) |
+| Порог | 3 неудачные попытки |
+| Окно накопления | 5 минут |
+| Время блокировки (`blackhole`) | 24 часа |
+
+Таким образом, три неудачные попытки входа с одного IP в пределах пяти минут приводят к созданию решения CrowdSec. Firewall Bouncer применяет блокировку на уровне firewall.
 
 ## Проверка
 
-### Проверить установленные сценарии
+### Проверить конфигурацию CrowdSec
 
 ```bash
-sudo cscli scenarios list | grep -E 'ssh-invalid|ssh-root|ssh-bf'
+sudo crowdsec -c /etc/crowdsec/config.yaml -t
 ```
 
-### Проверить parser для invalid user
+### Посмотреть установленные сценарии
+
+```bash
+sudo cscli scenarios list
+```
+
+Для выборочной проверки:
+
+```bash
+sudo cscli scenarios list | grep -E 'ssh-invalid|ssh-root|3x-ui-bf'
+```
+
+### Проверить SSH parser
+
+Для invalid user:
 
 ```bash
 sudo cscli explain --log 'Sep 04 10:14:54 1cadman.egs54.ru sshd-session[2000214]: Connection closed by invalid user test 221.153.12.93 port 48956 [preauth]' --type syslog
 ```
 
-Ожидается:
-
-```text
-parser success
-```
-
-### Проверить parser для root
+Для root:
 
 ```bash
 sudo cscli explain --log 'Sep 04 10:25:41 1cadman.egs54.ru sshd-session[2006083]: Connection closed by authenticating user root 75.64.135.45 port 49414 [preauth]' --type syslog
 ```
 
-Ожидается:
+В обоих случаях проверьте успешное прохождение соответствующего локального parser.
 
-```text
-parser success
+### Проверить 3x-ui parser
+
+```bash
+sudo cscli explain \
+  --log '2026/10/31 13:43:35 WARNING - failed login: username="admin", IP="203.0.113.10", reason="invalid credentials"' \
+  --type 3x-ui \
+  --verbose
 ```
 
-### Проверить активные решения
+В выводе должен присутствовать parser `local/3x-ui-logs`, извлечённые `username`, `reason`, `source_ip` и метаданные `log_type = 3x-ui_failed_login`.
+
+### Проверить решения CrowdSec
 
 ```bash
 sudo cscli decisions list
 ```
 
-### Проверить конкретный IP
+Для конкретного IP:
 
 ```bash
-sudo cscli decisions list --ip 1.2.3.4
+sudo cscli decisions list --ip 203.0.113.10
 ```
 
 ### Проверить Firewall Bouncer
@@ -275,26 +276,40 @@ sudo cscli decisions list --ip 1.2.3.4
 sudo nft list ruleset
 ```
 
+Фактическая блокировка на уровне firewall требует работающего Firewall Bouncer.
+
 ## Обновление
 
-После изменения правил:
+Получить изменения репозитория:
 
 ```bash
 cd ~/crowdsec-custom
 git pull
-sudo ./install.sh
 ```
 
-Перед перезапуском конфигурация снова проверяется.
+Затем переустановить нужный набор:
+
+```bash
+# Только SSH
+sudo ./install.sh ssh
+
+# Только 3x-ui
+sudo ./install.sh 3x-ui
+
+# Все наборы
+sudo ./install.sh all
+```
+
+Установщик проверяет конфигурацию CrowdSec перед перезапуском службы.
 
 ## Версионирование
 
-Рабочие версии конфигурации сохраняются через Git tags.
+Рабочие версии конфигурации можно сохранять через Git tags.
 
 Создание версии:
 
 ```bash
-git tag -a v1.0.0 -m "Initial working SSH protection"
+git tag -a v1.0.0 -m "Initial custom CrowdSec rules"
 git push origin v1.0.0
 ```
 
@@ -305,7 +320,7 @@ git fetch --tags
 git checkout v1.0.0
 ```
 
-Это позволяет откатиться к предыдущей рабочей версии.
+Это позволяет вернуться к предыдущей версии правил.
 
 ## Важно
 
@@ -316,23 +331,26 @@ git checkout v1.0.0
 /etc/crowdsec/scenarios/
 ```
 
-Файлы официального CrowdSec Hub не изменяются.
+Acquisition-файл 3x-ui устанавливается в:
 
-Собственные правила хранятся отдельно, чтобы обновления официального Hub не перезаписывали их.
+```text
+/etc/crowdsec/acquis.d/
+```
+
+Файлы официального CrowdSec Hub не изменяются. Собственные правила хранятся отдельно, чтобы обновления официального Hub не перезаписывали их.
 
 ## Развитие проекта
 
-Репозиторий предназначен для постепенного накопления собственных решений CrowdSec.
+Репозиторий предназначен для постепенного накопления собственных конфигураций CrowdSec для разных сервисов.
 
-Перед добавлением нового правила оно должно:
+Перед добавлением нового набора правил необходимо проверить:
 
-- пройти проверку конфигурации CrowdSec;
-- корректно обрабатываться через `cscli explain`;
-- быть проверено на реальных логах;
-- быть проверено на реальном `alert`;
-- быть проверено на реальном `decision`.
-
-В дальнейшем сюда можно добавлять собственные правила для SSH, Apache, Nginx, PostgreSQL, Docker и других Linux-сервисов.
+- корректность конфигурации CrowdSec;
+- обработку тестовых записей через `cscli explain`;
+- работу на реальных логах;
+- создание ожидаемого `alert`;
+- создание ожидаемого `decision`;
+- применение решения Firewall Bouncer.
 
 ---
 
@@ -340,99 +358,107 @@ git checkout v1.0.0
 
 ## Purpose
 
-This repository is intended for centralized storage, version control, and deployment of custom CrowdSec rules.
+This repository provides centralized storage, version control, and deployment of custom CrowdSec configurations.
 
-The main goal of the current configuration is to strengthen SSH protection against automated attacks.
+Two independent rule sets are currently available:
 
-Current rules:
+- **SSH** — protects against login attempts using nonexistent users and SSH authentication attempts as `root`;
+- **3x-ui** — detects brute-force attacks against the 3x-ui web panel.
 
-- an SSH login attempt using a nonexistent user results in an immediate IP ban;
-- an SSH authentication attempt as `root` results in an immediate IP ban;
-- the standard CrowdSec scenarios `ssh-bf`, `ssh-bf_user-enum`, `ssh-slow-bf`, and `ssh-slow-bf_user-enum` continue to operate independently of the custom rules.
+The rule sets can be installed separately or together. Installing one set does not remove or modify the files belonging to the other set.
 
-CrowdSec creates the `decision`, while the Firewall Bouncer applies it at the firewall level.
+CrowdSec creates a `decision`, and the Firewall Bouncer applies it at the firewall level. These custom rules complement the standard CrowdSec configuration; they do not replace it.
 
-> **Note:** custom rules work alongside the standard CrowdSec configuration and do not replace it.
+## Requirements
+
+- A Linux server;
+- CrowdSec installed and configured;
+- A working Firewall Bouncer for actual IP blocking;
+- For the `3x-ui` set, 3x-ui with its log file at `/var/log/x-ui/3xui.log`.
 
 ## Installation
 
-CrowdSec must already be installed on the target server.
+Clone the repository and enter its directory:
 
 ```bash
 git clone git@github.com:Daywer/crowdsec-custom.git
 cd crowdsec-custom
-sudo ./install.sh
 ```
 
-The installer automatically:
+The installer requires one argument:
 
-1. installs the parser;
-2. installs the scenarios;
-3. validates the CrowdSec configuration;
-4. restarts CrowdSec only after successful validation.
+```text
+sudo ./install.sh {ssh|3x-ui|all}
+```
 
-Before restarting, the following validation is performed:
+Examples:
 
 ```bash
-crowdsec -c /etc/crowdsec/config.yaml -t
+# Install SSH rules only
+sudo ./install.sh ssh
+
+# Install 3x-ui rules only
+sudo ./install.sh 3x-ui
+
+# Install all available rule sets
+sudo ./install.sh all
 ```
 
-If validation fails, CrowdSec is not restarted.
+| Argument | Installed components |
+|---|---|
+| `ssh` | SSH parser and two SSH scenarios |
+| `3x-ui` | 3x-ui parser, scenario, and acquisition file |
+| `all` | Both rule sets |
 
-## What Is Installed
+After installation, the script:
 
-The repository contains:
+1. validates the CrowdSec configuration using `crowdsec -c /etc/crowdsec/config.yaml -t`;
+2. restarts CrowdSec only if validation succeeds.
 
-- a parser for `sshd-session`;
-- a scenario that immediately bans SSH attempts using a nonexistent user;
-- a scenario that immediately bans SSH authentication attempts as `root`;
-- an installation script for automated deployment.
+If validation fails, the script stops and does not restart CrowdSec.
 
-## Structure
+Re-running the installer replaces the selected set's files with the versions from the repository. Files belonging to other sets are not removed.
+
+## Repository Structure
 
 ```text
 crowdsec-custom/
 ├── README.md
 ├── install.sh
 ├── parsers/
-│   └── sshd-session-local.yaml
-└── scenarios/
-    ├── ssh-invalid-user-local.yaml
-    └── ssh-root-auth-local.yaml
+│   ├── sshd-session-local.yaml
+│   └── 3x-ui-logs.yaml
+├── scenarios/
+│   ├── ssh-invalid-user-local.yaml
+│   ├── ssh-root-auth-local.yaml
+│   └── 3x-ui-bf.yaml
+└── acquisition/
+    └── 3x-ui.yaml
 ```
 
-## Parser
+## SSH Rule Set
 
-File:
+### Parser
 
-```text
-parsers/sshd-session-local.yaml
-```
+File: `parsers/sshd-session-local.yaml`
 
 The parser is designed for OpenSSH using the `sshd-session` process.
 
-It handles two types of messages.
+It handles two message types.
 
-### Nonexistent User
+**Nonexistent user:**
 
 ```text
 Connection closed by invalid user <user> <IP> port <port> [preauth]
 ```
 
-The parser extracts:
-
-```text
-source_ip
-target_user
-```
-
-and creates the event:
+The parser extracts `source_ip` and `target_user` and creates the event:
 
 ```text
 log_type = ssh_failed-auth
 ```
 
-### Root Authentication Attempt
+**Root authentication attempt:**
 
 ```text
 Connection closed by authenticating user root <IP> port <port> [preauth]
@@ -444,90 +470,18 @@ The parser creates:
 log_type = ssh_root-auth
 ```
 
-with:
+with `source_ip` and `target_user = root`.
 
-```text
-source_ip
-target_user = root
-```
+### Scenarios
 
-## Scenario: Nonexistent User
+| File | Scenario name | Condition |
+|---|---|---|
+| `scenarios/ssh-invalid-user-local.yaml` | `local/ssh-invalid-user` | One login attempt using a nonexistent user |
+| `scenarios/ssh-root-auth-local.yaml` | `local/ssh-root-auth` | One SSH authentication attempt as `root` |
 
-File:
+Each event triggers a CrowdSec alert and an immediate IP ban. The ban duration is controlled by the global CrowdSec policy in `/etc/crowdsec/profiles.yaml`. The current configuration uses a 24-hour ban.
 
-```text
-scenarios/ssh-invalid-user-local.yaml
-```
-
-Scenario name:
-
-```text
-local/ssh-invalid-user
-```
-
-Logic:
-
-```text
-invalid user
-      ↓
-1 event
-      ↓
-CrowdSec alert
-      ↓
-BAN
-```
-
-A single SSH login attempt using a nonexistent user is enough to trigger an immediate IP ban.
-
-## Scenario: Root Authentication
-
-File:
-
-```text
-scenarios/ssh-root-auth-local.yaml
-```
-
-Scenario name:
-
-```text
-local/ssh-root-auth
-```
-
-Logic:
-
-```text
-SSH authentication attempt as root
-      ↓
-1 event
-      ↓
-CrowdSec alert
-      ↓
-BAN
-```
-
-The rule applies specifically to `root`.
-
-## Ban Duration
-
-The ban duration is controlled by the global CrowdSec policy in:
-
-```text
-/etc/crowdsec/profiles.yaml
-```
-
-The current infrastructure uses:
-
-```text
-24 hours
-```
-
-Therefore, new decisions generated by these scenarios receive a 24-hour ban.
-
-## Standard CrowdSec SSH Scenarios
-
-The custom rules do not replace the standard CrowdSec scenarios.
-
-The following continue to operate:
+The standard CrowdSec scenarios continue to operate independently:
 
 ```text
 crowdsecurity/ssh-bf
@@ -536,65 +490,130 @@ crowdsecurity/ssh-slow-bf
 crowdsecurity/ssh-slow-bf_user-enum
 ```
 
-Overall protection:
+## 3x-ui Rule Set
+
+### Log Acquisition
+
+Repository file: `acquisition/3x-ui.yaml`
+
+The installer places it at:
 
 ```text
-SSH
-├── invalid user
-│   └── 1 event → BAN
-│
-├── root authentication attempt
-│   └── 1 event → BAN
-│
-├── normal bruteforce
-│   └── crowdsecurity/ssh-bf
-│
-└── slow bruteforce
-    └── crowdsecurity/ssh-slow-bf
+/etc/crowdsec/acquis.d/3x-ui.yaml
 ```
+
+The configuration reads:
+
+```text
+/var/log/x-ui/3xui.log
+```
+
+and sends the log entries to CrowdSec with the `3x-ui` type.
+
+### Parser
+
+File: `parsers/3x-ui-logs.yaml`
+
+The parser processes failed login records from the 3x-ui web panel. Example:
+
+```text
+2026/10/31 13:43:35 WARNING - failed login: username="admin", IP="203.0.113.10", reason="invalid credentials"
+```
+
+The parser extracts:
+
+- `username` — the username;
+- `source_ip` — the source IP address;
+- `reason` — the failure reason.
+
+The event receives the following metadata:
+
+```text
+log_type = 3x-ui_failed_login
+service = 3x-ui
+source_ip = <IP>
+```
+
+Successful logins are not events for this scenario.
+
+### Brute-Force Scenario
+
+File: `scenarios/3x-ui-bf.yaml`
+
+Scenario name:
+
+```text
+local/3x-ui-bf
+```
+
+Detection parameters:
+
+| Parameter | Value |
+|---|---|
+| Grouping | Source IP (`source_ip`) |
+| Threshold | 3 failed attempts |
+| Accumulation window | 5 minutes |
+| Ban duration (`blackhole`) | 24 hours |
+
+Three failed login attempts from the same IP within five minutes generate a CrowdSec decision. The Firewall Bouncer applies the block at the firewall level.
 
 ## Verification
 
-### Check installed scenarios
+### Validate CrowdSec Configuration
 
 ```bash
-sudo cscli scenarios list | grep -E 'ssh-invalid|ssh-root|ssh-bf'
+sudo crowdsec -c /etc/crowdsec/config.yaml -t
 ```
 
-### Test the parser for invalid user
+### List Installed Scenarios
+
+```bash
+sudo cscli scenarios list
+```
+
+To filter the custom scenarios:
+
+```bash
+sudo cscli scenarios list | grep -E 'ssh-invalid|ssh-root|3x-ui-bf'
+```
+
+### Test the SSH Parser
+
+For an invalid user:
 
 ```bash
 sudo cscli explain --log 'Sep 04 10:14:54 1cadman.egs54.ru sshd-session[2000214]: Connection closed by invalid user test 221.153.12.93 port 48956 [preauth]' --type syslog
 ```
 
-Expected result:
-
-```text
-parser success
-```
-
-### Test the parser for root
+For root:
 
 ```bash
 sudo cscli explain --log 'Sep 04 10:25:41 1cadman.egs54.ru sshd-session[2006083]: Connection closed by authenticating user root 75.64.135.45 port 49414 [preauth]' --type syslog
 ```
 
-Expected result:
+In both cases, verify that the corresponding local parser succeeds.
 
-```text
-parser success
+### Test the 3x-ui Parser
+
+```bash
+sudo cscli explain \
+  --log '2026/10/31 13:43:35 WARNING - failed login: username="admin", IP="203.0.113.10", reason="invalid credentials"' \
+  --type 3x-ui \
+  --verbose
 ```
 
-### Check active decisions
+The output should show the `local/3x-ui-logs` parser, the extracted `username`, `reason`, and `source_ip`, and the `log_type = 3x-ui_failed_login` metadata.
+
+### Check CrowdSec Decisions
 
 ```bash
 sudo cscli decisions list
 ```
 
-### Check a specific IP
+For a specific IP:
 
 ```bash
-sudo cscli decisions list --ip 1.2.3.4
+sudo cscli decisions list --ip 203.0.113.10
 ```
 
 ### Check Firewall Bouncer
@@ -603,37 +622,51 @@ sudo cscli decisions list --ip 1.2.3.4
 sudo nft list ruleset
 ```
 
+Actual firewall blocking requires a running Firewall Bouncer.
+
 ## Updating
 
-After changing the rules:
+Pull the latest repository changes:
 
 ```bash
 cd ~/crowdsec-custom
 git pull
-sudo ./install.sh
 ```
 
-The configuration is validated again before CrowdSec is restarted.
+Then reinstall the required rule set:
+
+```bash
+# SSH only
+sudo ./install.sh ssh
+
+# 3x-ui only
+sudo ./install.sh 3x-ui
+
+# All rule sets
+sudo ./install.sh all
+```
+
+The installer validates the CrowdSec configuration before restarting the service.
 
 ## Versioning
 
-Working configurations are versioned using Git tags.
+Working configurations can be saved using Git tags.
 
 Create a version:
 
 ```bash
-git tag -a v1.0.0 -m "Initial working SSH protection"
+git tag -a v1.0.0 -m "Initial custom CrowdSec rules"
 git push origin v1.0.0
 ```
 
-Get a specific version:
+Check out a specific version:
 
 ```bash
 git fetch --tags
 git checkout v1.0.0
 ```
 
-This allows you to roll back to a previous working version.
+This makes it possible to roll back to a previous set of rules.
 
 ## Important
 
@@ -644,20 +677,23 @@ Custom parsers and scenarios are installed into:
 /etc/crowdsec/scenarios/
 ```
 
-Official CrowdSec Hub files are not modified.
+The 3x-ui acquisition file is installed into:
 
-Custom rules are stored separately so that updates to the official Hub do not overwrite them.
+```text
+/etc/crowdsec/acquis.d/
+```
+
+Official CrowdSec Hub files are not modified. Custom rules are stored separately so that official Hub updates do not overwrite them.
 
 ## Project Development
 
-This repository is intended to become a growing collection of custom CrowdSec security solutions.
+This repository is intended to become a growing collection of custom CrowdSec configurations for different services.
 
-Before adding a new rule, it should:
+Before adding a new rule set, verify:
 
-- pass CrowdSec configuration validation;
-- work correctly with `cscli explain`;
-- be tested against real logs;
-- be verified through a real `alert`;
-- be verified through a real `decision`.
-
-Additional custom rules for SSH, Apache, Nginx, PostgreSQL, Docker, and other Linux services can be added in the future.
+- CrowdSec configuration validity;
+- correct parsing of test records with `cscli explain`;
+- operation against real logs;
+- generation of the expected `alert`;
+- generation of the expected `decision`;
+- enforcement of the decision by the Firewall Bouncer.
