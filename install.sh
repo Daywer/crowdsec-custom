@@ -1,24 +1,70 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 PARSER_DIR="/etc/crowdsec/parsers/s01-parse"
 SCENARIO_DIR="/etc/crowdsec/scenarios"
+ACQUIS_DIR="/etc/crowdsec/acquis.d"
 
-echo "[1/4] Installing parser..."
-install -Dm644 parsers/sshd-session-local.yaml \
-    "$PARSER_DIR/sshd-session-local.yaml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "[2/4] Installing scenarios..."
-install -Dm644 scenarios/ssh-invalid-user-local.yaml \
-    "$SCENARIO_DIR/ssh-invalid-user-local.yaml"
+usage() {
+    echo "Usage: sudo $0 {ssh|3x-ui|all}"
+    exit 1
+}
 
-install -Dm644 scenarios/ssh-root-auth-local.yaml \
-    "$SCENARIO_DIR/ssh-root-auth-local.yaml"
+if [[ $EUID -ne 0 ]]; then
+    echo "Error: run this script as root (sudo)."
+    exit 1
+fi
 
-echo "[3/4] Checking CrowdSec configuration..."
+[[ $# -eq 1 ]] || usage
+
+install_ssh() {
+    echo "Installing SSH configuration..."
+
+    install -Dm644 "$SCRIPT_DIR/parsers/sshd-session-local.yaml" \
+        "$PARSER_DIR/sshd-session-local.yaml"
+
+    install -Dm644 "$SCRIPT_DIR/scenarios/ssh-invalid-user-local.yaml" \
+        "$SCENARIO_DIR/ssh-invalid-user-local.yaml"
+
+    install -Dm644 "$SCRIPT_DIR/scenarios/ssh-root-auth-local.yaml" \
+        "$SCENARIO_DIR/ssh-root-auth-local.yaml"
+}
+
+install_3x_ui() {
+    echo "Installing 3x-ui configuration..."
+
+    install -Dm644 "$SCRIPT_DIR/parsers/3x-ui-logs.yaml" \
+        "$PARSER_DIR/3x-ui-logs.yaml"
+
+    install -Dm644 "$SCRIPT_DIR/scenarios/3x-ui-bf.yaml" \
+        "$SCENARIO_DIR/3x-ui-bf.yaml"
+
+    install -Dm644 "$SCRIPT_DIR/acquisition/3x-ui.yaml" \
+        "$ACQUIS_DIR/3x-ui.yaml"
+}
+
+case "$1" in
+    ssh)
+        install_ssh
+        ;;
+    3x-ui)
+        install_3x_ui
+        ;;
+    all)
+        install_ssh
+        install_3x_ui
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+echo "Checking CrowdSec configuration..."
 crowdsec -c /etc/crowdsec/config.yaml -t
 
-echo "[4/4] Restarting CrowdSec..."
+echo "Restarting CrowdSec..."
 systemctl restart crowdsec
 
-echo "CrowdSec custom configuration installed successfully."
+echo "Installation completed successfully."
