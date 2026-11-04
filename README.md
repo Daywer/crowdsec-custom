@@ -30,10 +30,23 @@ CrowdSec создаёт `decision`, а Firewall Bouncer применяет ег�
 
 ## Установка
 
-Клонировать репозиторий и перейти в его каталог:
+Клонировать репозиторий можно с GitHub или GitVerse:
+
+**GitHub:**
 
 ```bash
 git clone https://github.com/Daywer/crowdsec-custom.git
+```
+
+**GitVerse:**
+
+```bash
+git clone https://gitverse.ru/Daywer/crowdsec-custom.git
+```
+
+Перейти в каталог проекта:
+
+```bash
 cd crowdsec-custom
 ```
 
@@ -378,10 +391,23 @@ CrowdSec creates a `decision`, and the Firewall Bouncer applies it at the firewa
 
 ## Installation
 
-Clone the repository and enter its directory:
+You can clone the repository from either GitHub or GitVerse:
+
+**GitHub:**
 
 ```bash
 git clone https://github.com/Daywer/crowdsec-custom.git
+```
+
+**GitVerse:**
+
+```bash
+git clone https://gitverse.ru/Daywer/crowdsec-custom.git
+```
+
+Then enter the project directory:
+
+```bash
 cd crowdsec-custom
 ```
 
